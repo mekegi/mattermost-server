@@ -165,6 +165,7 @@ type SearchParameter struct {
 	PerPage                *int    `json:"per_page"`
 	IncludeDeletedChannels *bool   `json:"include_deleted_channels"`
 	Modifier               *string `json:"modifier"` // whether it's messages or file
+	IncludeReactions       *bool   `json:"include_reactions"`
 }
 
 type AnalyticsPostCountsOptions struct {

@@ -1671,7 +1671,7 @@ func (s *SqlPostStore) getParentsPosts(channelId string, offset int, limit int, 
 			FROM
 				Posts
 			WHERE
-				ChannelId = ? ` + deleteAtCondition + ` 
+				ChannelId = ? ` + deleteAtCondition + `
 			ORDER BY CreateAt DESC
 			LIMIT ? OFFSET ?) q
 		WHERE q.RootId != ''`
@@ -1758,13 +1758,13 @@ func (s *SqlPostStore) getParentsPostsPostgreSQL(channelId string, offset int, l
                 FROM
                     Posts
                 WHERE
-                    Posts.ChannelId = ? `+deleteAtSubQueryCondition+` 
+                    Posts.ChannelId = ? `+deleteAtSubQueryCondition+`
                 ORDER BY Posts.CreateAt DESC
                 LIMIT ? OFFSET ?) q3
             WHERE q3.RootId != '') q1
             ON `+onStatement+`
         WHERE
-            q2.ChannelId = ? `+deleteAtQueryCondition+` 
+            q2.ChannelId = ? `+deleteAtQueryCondition+`
         ORDER BY q2.CreateAt`, channelId, limit, offset, channelId)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to find Posts with channelId=%s", channelId)
@@ -2004,7 +2004,18 @@ func (s *SqlPostStore) search(teamId string, userId string, params *model.Search
 		}
 
 		searchClause := fmt.Sprintf("to_tsvector('%[1]s', %[2]s) @@  to_tsquery('%[1]s', ?)", s.pgDefaultTextSearchConfig, searchType)
-		baseQuery = baseQuery.Where(searchClause, termsClause)
+
+		searchExpr := sq.Expr(searchClause, termsClause)
+		if params.IncludeReactions {
+			searchExpr = sq.Or{
+				searchExpr,
+				sq.And{
+					sq.Expr(`hasreactions`),
+					sq.Eq{`q2.userid`: userId},
+				},
+			}
+		}
+		baseQuery = baseQuery.Where(searchExpr)
 	} else if s.DriverName() == model.DatabaseDriverMysql {
 		if searchType == "Message" {
 			terms, err = removeMysqlStopWordsFromTerms(terms)
@@ -2061,6 +2072,7 @@ func (s *SqlPostStore) search(teamId string, userId string, params *model.Search
 	baseQuery = baseQuery.Where(fmt.Sprintf("ChannelId IN (%s)", inQueryClause), inQueryClauseArgs...)
 
 	searchQuery, searchQueryArgs, err := baseQuery.ToSql()
+	mlog.Warn(searchQuery, mlog.Array("args", searchQueryArgs))
 	if err != nil {
 		return nil, err
 	}
